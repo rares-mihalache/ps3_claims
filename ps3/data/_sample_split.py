@@ -20,6 +20,8 @@ def create_sample_column(df, id_column, training_frac=0.8):
     pd.DataFrame
         Training data with sample column containing train/test split based on IDs.
     """
+    df = df.copy()
+
     if isinstance(id_column, str):
         id_column = [id_column]
 
