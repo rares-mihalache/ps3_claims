@@ -150,6 +150,17 @@ print(
     )
 )
 
+# Splines lower the training deviance from 73.60 to 73.22 and the test
+# deviance from 74.66 to 74.44, so the extra flexibility for BonusMalus and
+# Density also helps on unseen data. The problem set mentions VehPower, but the
+# script already treats VehPower as categorical, so we follow the TODO and use
+# Density.
+# To check for overfitting we compare train and test deviance. A training
+# deviance that keeps falling while the test deviance stays flat or rises means
+# the model is fitting noise. Here the gap only grows from 1.06 to 1.22. Choices
+# such as the number of knots should be tuned with cross-validation on the
+# training set rather than by looking at the test set.
+
 # %%
 # Use a GBM instead as an estimator. The Tweedie objective with power 1.5
 # matches the loss of the GLMs, and LightGBM handles the categorical columns
@@ -173,6 +184,10 @@ print(
         / np.sum(w_test_t)
     )
 )
+
+# With default settings (learning rate 0.1, 100 trees) the LGBM reaches a much
+# lower training deviance (65.00) than the GLMs, but its test deviance is 73.99,
+# a gap of 8.99. It clearly overfits.
 
 # %%
 # Tune the LGBM to reduce overfitting. To save compute time we only tune
@@ -210,6 +225,12 @@ print(
         np.sum(df["Exposure"].values[test] * df_test["pp_t_lgbm"]),
     )
 )
+
+# Cross-validation picks a learning rate of 0.01 with 100 trees. The gap
+# between train and test deviance falls from 8.99 to 1.52, so the tuned model
+# no longer overfits. Its test deviance (74.00) is lower than for both GLMs
+# (74.66 and 74.44) but no better than the default LGBM. It also predicts 9.09m
+# of claims on the test set against 9.78m observed, about 7% too low.
 # %%
 # Let's compare the sorting of the pure premium predictions
 
