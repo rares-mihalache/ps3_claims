@@ -11,7 +11,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
 
-from ps3.data import create_sample_split, load_transform
+from ps3.data import create_sample_column, load_transform
 
 # %%
 # load data
@@ -25,8 +25,7 @@ y = df["PurePremium"]
 # TODO: Why do you think, we divide by exposure here to arrive at our outcome variable?
 
 
-# TODO: use your create_sample_split function here
-# df = create_sample_split(...)
+df = create_sample_column(df, "IDpol", training_frac=0.8)
 train = np.where(df["sample"] == "train")
 test = np.where(df["sample"] == "test")
 df_train = df.iloc[train].copy()
