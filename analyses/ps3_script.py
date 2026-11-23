@@ -2,6 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import lightgbm as lgb
 from dask_ml.preprocessing import Categorizer
 from glum import GeneralizedLinearRegressor, TweedieDistribution
 from lightgbm import LGBMRegressor
@@ -386,4 +387,40 @@ ax.set(
 )
 ax.legend()
 plt.show()
+
 # %%
+# The constrained LGBM has a slightly higher deviance than the unconstrained
+# one (train 73.09 vs 72.48, test 74.12 vs 74.00), which is the price of
+# restricting the model. In return, its predictions never fall as BonusMalus
+# gets worse: for the first test policy the unconstrained model jumps to about
+# 223 at a BonusMalus of 62 and drops back to about 155 at 64, while the
+# constrained model only rises. It also predicts 9.17m of claims on the test
+# set against 9.78m observed, slightly closer than the unconstrained 9.09m.
+
+# %%
+# PS4 Ex 2: learning curve of the best constrained LGBM. eval_set makes
+# LightGBM score the train and test sets after every tree without training on
+# them, so we can see how the loss develops as trees are added.
+best_constrained = cv_constrained.best_estimator_
+best_constrained.fit(
+    X_train_t,
+    y_train_t,
+    estimate__sample_weight=w_train_t,
+    estimate__eval_set=[(X_train_t, y_train_t), (X_test_t, y_test_t)],
+    estimate__eval_sample_weight=[w_train_t, w_test_t],
+    estimate__eval_names=["train", "test"],
+)
+lgb.plot_metric(best_constrained[-1], figsize=(10, 5))
+plt.show()
+
+
+# At 100 trees the test loss is still falling, so the model has not converged:
+# with a learning rate of 0.01, 100 trees are too few and the estimator is
+# undertrained rather than overfitting. A longer run keeps improving the test
+# loss until roughly 300 trees, but choosing the number of trees from the test
+# curve would leak test information. Better options are a larger grid for
+# n_estimators in the cross-validation, or early stopping on a validation split
+# of the training data. The grid search also only tried 50, 100 and 200 trees
+# and scored with an unweighted deviance, which may be why it settled on 100.
+# Note that LightGBM's "tweedie" metric is a negative log-likelihood, so its
+# values (about 45) are not on the same scale as the deviance above (about 74).
