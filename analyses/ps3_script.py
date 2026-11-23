@@ -282,4 +282,108 @@ ax.set(
 ax.legend(loc="upper left")
 plt.plot()
 
+# ===================================================================
+# Problem Set 4
+# ===================================================================
+
+# %%
+# PS4 Ex 1: monotonicity constraint for BonusMalus
+# Average claims per BonusMalus group, weighted by exposure: total claim amount
+# divided by total exposure, so policies observed for longer count more.
+bonus_malus = df_train.groupby("BonusMalus")[["ClaimAmountCut", "Exposure"]].sum()
+bonus_malus["avg_claims"] = bonus_malus["ClaimAmountCut"] / bonus_malus["Exposure"]
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.scatter(
+    bonus_malus.index,
+    bonus_malus["avg_claims"],
+    s=bonus_malus["Exposure"] / bonus_malus["Exposure"].max() * 300 + 5,
+    alpha=0.6,
+)
+ax.set(
+    title="Average claims per year of exposure by BonusMalus (training set)",
+    xlabel="BonusMalus",
+    ylabel="Claim amount per year of exposure",
+)
+plt.show()
+
+# Without a constraint the LGBM can follow the noise in this plot: above about
+# 110 many BonusMalus groups have little exposure and some have no claims at
+# all, so a flexible model could predict a lower price for a worse claim
+# history. That would be unfair to customers and easy to game, so we force the
+# predictions to increase with BonusMalus.
+
+# %%
+# Constrained LGBM: 1 means predictions may only increase with BonusMalus,
+# 0 means no constraint for the other features.
+monotone_constraints = [1 if col == "BonusMalus" else 0 for col in X_train_t.columns]
+print("monotone constraints:", monotone_constraints)
+
+constrained_lgbm = Pipeline(
+    [
+        (
+            "estimate",
+            LGBMRegressor(
+                objective="tweedie",
+                tweedie_variance_power=1.5,
+                monotone_constraints=monotone_constraints,
+            ),
+        )
+    ]
+)
+# Same grid and scorer as the unconstrained LGBM, so the two are comparable.
+cv_constrained = GridSearchCV(
+    constrained_lgbm, param_grid, scoring=tweedie_scorer, cv=5, verbose=1
+)
+cv_constrained.fit(X_train_t, y_train_t, estimate__sample_weight=w_train_t)
+print("best parameters:", cv_constrained.best_params_)
+
+df_test["pp_t_lgbm_constrained"] = cv_constrained.best_estimator_.predict(X_test_t)
+df_train["pp_t_lgbm_constrained"] = cv_constrained.best_estimator_.predict(X_train_t)
+
+print(
+    "training loss t_lgbm_constrained:  {}".format(
+        TweedieDist.deviance(
+            y_train_t, df_train["pp_t_lgbm_constrained"], sample_weight=w_train_t
+        )
+        / np.sum(w_train_t)
+    )
+)
+print(
+    "testing loss t_lgbm_constrained:  {}".format(
+        TweedieDist.deviance(
+            y_test_t, df_test["pp_t_lgbm_constrained"], sample_weight=w_test_t
+        )
+        / np.sum(w_test_t)
+    )
+)
+
+# %%
+print(
+    "Total claim amount on test set, observed = {}, predicted = {}".format(
+        df["ClaimAmountCut"].values[test].sum(),
+        np.sum(df["Exposure"].values[test] * df_test["pp_t_lgbm_constrained"]),
+    )
+)
+
+# %%
+# Check that the constraint works: take the first policy in the test set, keep
+# all its other features fixed, and change only BonusMalus from 50 to 230.
+bonus_malus_grid = np.arange(50, 231)
+customer = X_test_t.iloc[[0]]
+fig, ax = plt.subplots(figsize=(10, 5))
+for label, model in [
+    ("Unconstrained LGBM", cv.best_estimator_),
+    ("Constrained LGBM", cv_constrained.best_estimator_),
+]:
+    rows = pd.concat([customer] * len(bonus_malus_grid), ignore_index=True)
+    rows["BonusMalus"] = bonus_malus_grid
+    ax.plot(bonus_malus_grid, model.predict(rows), label=label)
+ax.set(
+    title="Predicted pure premium for the first test policy as BonusMalus changes",
+    xlabel="BonusMalus",
+    ylabel="Predicted pure premium",
+)
+ax.legend()
+plt.show()
 # %%
