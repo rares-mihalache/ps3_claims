@@ -1,4 +1,5 @@
 # %%
+import dalex as dx
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -424,3 +425,54 @@ plt.show()
 # and scored with an unweighted deviance, which may be why it settled on 100.
 # Note that LightGBM's "tweedie" metric is a negative log-likelihood, so its
 # values (about 45) are not on the same scale as the deviance above (about 74).
+
+
+# %%
+# PS4 Ex 5: Shapley decomposition of one prediction, for the constrained LGBM
+# and the initial GLM (t_glm1). Both explainers use the test set as data.
+lgbm_explainer = dx.Explainer(
+    cv_constrained.best_estimator_,
+    X_test_t,
+    y_test_t,
+    label="Constrained LGBM",
+    verbose=False,
+)
+glm_explainer = dx.Explainer(
+    t_glm1, X_test_t, y_test_t, label="GLM benchmark", verbose=False
+)
+explainers = [lgbm_explainer, glm_explainer]
+
+# Decompose the prediction for the first policy of the test set. type="shap"
+# averages the contributions over B random orderings of the features, and the
+# seed makes the result the same on every run.
+observation = X_test_t.iloc[[0]]
+shap = [
+    explainer.predict_parts(observation, type="shap", B=25, random_state=42)
+    for explainer in explainers
+]
+
+for explainer, parts in zip(explainers, shap):
+    print(
+        "{}: prediction = {:.2f}, average prediction = {:.2f}".format(
+            explainer.label, parts.prediction, parts.intercept
+        )
+    )
+
+# Rows with B == 0 hold the average over the orderings.
+contributions = pd.DataFrame(
+    {
+        explainer.label: parts.result.query("B == 0").set_index("variable")[
+            "contribution"
+        ]
+        for explainer, parts in zip(explainers, shap)
+    }
+)
+print(contributions.round(2))
+
+# Both decompositions in one plot (opens in the browser).
+shap[0].plot(shap[1])
+
+# Both models lower this policy's premium most through BonusMalus = 50
+# (-30.06 in the LGBM, -66.42 in the GLM), and most features push in the same
+# direction. The GLM's contributions are larger throughout, and VehBrand B12 is
+# the only feature with opposite signs (-16.82 in the GLM, +1.54 in the LGBM).
