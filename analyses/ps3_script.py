@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+import dalex as dx
 from dask_ml.preprocessing import Categorizer
 from glum import GeneralizedLinearRegressor, TweedieDistribution
 from lightgbm import LGBMRegressor
@@ -445,3 +446,33 @@ print(metrics_comparison)
 # The constraint costs a small amount of accuracy and ranking power in exchange
 # for predictions that never fall as BonusMalus gets worse. RMSE is much larger
 # than MAE because a few very large claims dominate the squared errors.
+
+# %%
+# PS4 Ex 4: partial dependence plots with DALEX. An explainer wraps a fitted
+# model together with the data, so DALEX can vary one feature at a time and
+# average the predictions over the other features.
+explainer_constrained = dx.Explainer(
+    cv_constrained.best_estimator_, X_test_t, y_test_t, label="Constrained LGBM"
+)
+explainer_unconstrained = dx.Explainer(
+    cv.best_estimator_, X_test_t, y_test_t, label="Unconstrained LGBM"
+)
+
+# PDPs for the numerical features (BonusMalus, Density)
+pdp_num_constrained = explainer_constrained.model_profile(
+    variable_type="numerical", random_state=42
+)
+pdp_num_unconstrained = explainer_unconstrained.model_profile(
+    variable_type="numerical", random_state=42
+)
+pdp_num_constrained.plot(pdp_num_unconstrained)
+
+# PDPs for the categorical features (VehBrand, VehGas, Region, Area, DrivAge,
+# VehAge, VehPower)
+pdp_cat_constrained = explainer_constrained.model_profile(
+    variable_type="categorical", random_state=42
+)
+pdp_cat_unconstrained = explainer_unconstrained.model_profile(
+    variable_type="categorical", random_state=42
+)
+pdp_cat_constrained.plot(pdp_cat_unconstrained)
