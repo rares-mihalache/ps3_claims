@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
 
 from ps3.data import create_sample_column, load_transform
-
+from ps3.evaluation import evaluate_predictions
 # %%
 # load data
 df = load_transform()
@@ -424,3 +424,24 @@ plt.show()
 # and scored with an unweighted deviance, which may be why it settled on 100.
 # Note that LightGBM's "tweedie" metric is a negative log-likelihood, so its
 # values (about 45) are not on the same scale as the deviance above (about 74).
+
+# %%
+# PS4 Ex 3: compare the unconstrained and constrained LGBM on the test set
+metrics_comparison = pd.concat(
+    {
+        "LGBM": evaluate_predictions(
+            y_test_t, df_test["pp_t_lgbm"], sample_weight=w_test_t
+        )["value"],
+        "Constrained LGBM": evaluate_predictions(
+            y_test_t, df_test["pp_t_lgbm_constrained"], sample_weight=w_test_t
+        )["value"],
+    },
+    axis=1,
+)
+print(metrics_comparison)
+# The unconstrained LGBM is slightly more accurate (deviance 74.00 vs 74.12,
+# lower MAE and RMSE) and ranks risks better (Gini 0.237 vs 0.221). The
+# constrained model underpredicts total claims a little less (-6.2% vs -7.0%).
+# The constraint costs a small amount of accuracy and ranking power in exchange
+# for predictions that never fall as BonusMalus gets worse. RMSE is much larger
+# than MAE because a few very large claims dominate the squared errors.
