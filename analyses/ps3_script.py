@@ -505,7 +505,10 @@ for explainer, parts in zip(explainers, shap):
 contributions = pd.DataFrame(
     {
         explainer.label: parts.result.query("B == 0").set_index("variable")[
-            "contribution"git restore -- "*.pyc"
+            "contribution"
+        ]
+        for explainer, parts in zip(explainers, shap)
+    }
 )
 print(contributions.round(2))
 # Both decompositions in one plot (opens in the browser).
