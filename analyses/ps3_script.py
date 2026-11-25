@@ -15,6 +15,7 @@ from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScal
 
 from ps3.data import create_sample_column, load_transform
 from ps3.evaluation import evaluate_predictions
+
 # %%
 # load data
 df = load_transform()
@@ -476,3 +477,41 @@ pdp_cat_unconstrained = explainer_unconstrained.model_profile(
     variable_type="categorical", random_state=42
 )
 pdp_cat_constrained.plot(pdp_cat_unconstrained)
+
+# %%
+# PS4 Ex 5: Shapley decomposition of one prediction, for the constrained LGBM
+# and the initial GLM (t_glm1). The LGBM explainer is the one from Ex 4; the GLM
+# explainer also uses the test set as data.
+glm_explainer = dx.Explainer(
+    t_glm1, X_test_t, y_test_t, label="GLM benchmark", verbose=False
+)
+explainers = [explainer_constrained, glm_explainer]
+
+# Decompose the prediction for the first policy in the test set. Averaging over
+# B = 25 random orderings of the features gives contributions that add up to the
+# prediction minus the average prediction.
+observation = X_test_t.iloc[[0]]
+shap = [
+    explainer.predict_parts(observation, type="shap", B=25, random_state=42)
+    for explainer in explainers
+]
+for explainer, parts in zip(explainers, shap):
+    print(
+        "{}: prediction = {:.2f}, average prediction = {:.2f}".format(
+            explainer.label, parts.prediction, parts.intercept
+        )
+    )
+# Rows with B == 0 hold the average over the orderings.
+contributions = pd.DataFrame(
+    {
+        explainer.label: parts.result.query("B == 0").set_index("variable")[
+            "contribution"git restore -- "*.pyc"
+)
+print(contributions.round(2))
+# Both decompositions in one plot (opens in the browser).
+shap[0].plot(shap[1])
+
+# Both models lower this policy's premium most through BonusMalus = 50
+# (-30.06 in the LGBM, -66.42 in the GLM), and most features push in the same
+# direction. The GLM's contributions are larger throughout, and VehBrand B12 is
+# the only feature with opposite signs (-16.82 in the GLM, +1.54 in the LGBM).
