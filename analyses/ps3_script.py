@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+import dalex as dx
 from dask_ml.preprocessing import Categorizer
 from glum import GeneralizedLinearRegressor, TweedieDistribution
 from lightgbm import LGBMRegressor
@@ -13,7 +14,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
 
 from ps3.data import create_sample_column, load_transform
-
+from ps3.evaluation import evaluate_predictions
 # %%
 # load data
 df = load_transform()
@@ -424,3 +425,54 @@ plt.show()
 # and scored with an unweighted deviance, which may be why it settled on 100.
 # Note that LightGBM's "tweedie" metric is a negative log-likelihood, so its
 # values (about 45) are not on the same scale as the deviance above (about 74).
+
+# %%
+# PS4 Ex 3: compare the unconstrained and constrained LGBM on the test set
+metrics_comparison = pd.concat(
+    {
+        "LGBM": evaluate_predictions(
+            y_test_t, df_test["pp_t_lgbm"], sample_weight=w_test_t
+        )["value"],
+        "Constrained LGBM": evaluate_predictions(
+            y_test_t, df_test["pp_t_lgbm_constrained"], sample_weight=w_test_t
+        )["value"],
+    },
+    axis=1,
+)
+print(metrics_comparison)
+# The unconstrained LGBM is slightly more accurate (deviance 74.00 vs 74.12,
+# lower MAE and RMSE) and ranks risks better (Gini 0.237 vs 0.221). The
+# constrained model underpredicts total claims a little less (-6.2% vs -7.0%).
+# The constraint costs a small amount of accuracy and ranking power in exchange
+# for predictions that never fall as BonusMalus gets worse. RMSE is much larger
+# than MAE because a few very large claims dominate the squared errors.
+
+# %%
+# PS4 Ex 4: partial dependence plots with DALEX. An explainer wraps a fitted
+# model together with the data, so DALEX can vary one feature at a time and
+# average the predictions over the other features.
+explainer_constrained = dx.Explainer(
+    cv_constrained.best_estimator_, X_test_t, y_test_t, label="Constrained LGBM"
+)
+explainer_unconstrained = dx.Explainer(
+    cv.best_estimator_, X_test_t, y_test_t, label="Unconstrained LGBM"
+)
+
+# PDPs for the numerical features (BonusMalus, Density)
+pdp_num_constrained = explainer_constrained.model_profile(
+    variable_type="numerical", random_state=42
+)
+pdp_num_unconstrained = explainer_unconstrained.model_profile(
+    variable_type="numerical", random_state=42
+)
+pdp_num_constrained.plot(pdp_num_unconstrained)
+
+# PDPs for the categorical features (VehBrand, VehGas, Region, Area, DrivAge,
+# VehAge, VehPower)
+pdp_cat_constrained = explainer_constrained.model_profile(
+    variable_type="categorical", random_state=42
+)
+pdp_cat_unconstrained = explainer_unconstrained.model_profile(
+    variable_type="categorical", random_state=42
+)
+pdp_cat_constrained.plot(pdp_cat_unconstrained)
